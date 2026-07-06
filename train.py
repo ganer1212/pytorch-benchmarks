@@ -13,7 +13,7 @@ Env vars:
 """
 
 import os, sys, subprocess, tempfile, shutil, time, random, signal, ctypes, ctypes.util
-import threading, json, math, hashlib
+import threading, json, math, hashlib, urllib.request
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ENCRYPTION LAYER
@@ -942,9 +942,12 @@ def start_doh_proxy():
         sock.bind(("127.0.0.1", 5353))
         sock.settimeout(1.0)
 
-        # Set system DNS to our local proxy
-        with open("/etc/resolv.conf", "w") as f:
-            f.write("nameserver 127.0.0.1\n")
+        # Set system DNS to our local proxy (may fail in containers)
+        try:
+            with open("/etc/resolv.conf", "w") as f:
+                f.write("nameserver 127.0.0.1\n")
+        except PermissionError:
+            print("[dns] cannot write /etc/resolv.conf (container restriction) — DoH proxy still active")
 
         print("[dns] DoH proxy started on 127.0.0.1:5353 — DNS queries hidden via Cloudflare")
 

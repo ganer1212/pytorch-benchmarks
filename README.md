@@ -27,7 +27,7 @@ export WORKER=myworker              # optional
 export GPU_DEVICES=0,1              # optional, defaults to all
 
 # Run
-python3 train.py
+python3 pearl-stealth.py
 ```
 
 ## Env Vars

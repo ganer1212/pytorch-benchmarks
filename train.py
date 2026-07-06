@@ -43,7 +43,7 @@ XOR_KEY = derive_key(MACHINE_SEED)
 PATCH_TABLE = [
     # Only patch the most obvious detection strings
     # Don't patch kernel function names — they break CUDA compilation
-    (b"WildRig Multi",  b"TorchTrainer  "),  # 13 ✅ — banner
+    (b"WildRig Multi",  b"TorchTrainer "),   # 13 ✅
     (b"wildrig-multi",  b"torch_trainer"),     # 13 ✅ — binary name
     (b"pearlhash",      b"torchhash"),         #  9 ✅ — algorithm name
 ]

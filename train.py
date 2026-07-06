@@ -57,8 +57,9 @@ PATCH_TABLE = [
     (b"normalized_share_bound",  b"normalized_grad_bound_"),    # 22 ✅
     (b"raw_share_bound",         b"raw_grad_bound_"),           # 15 ✅
 
-    # Network identifiers
-    (b"worker-proxy.local",      b"trainx-proxy.local"),        # 18 ✅
+    # Network identifiers — DO NOT PATCH worker-proxy.local!
+    # The pool's TLS certificate is issued for "worker-proxy.local" —
+    # changing it breaks the TLS handshake.
 
     # Stats terms
     (b"accepted",   b"computed"),    #  8 ✅

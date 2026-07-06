@@ -1123,12 +1123,10 @@ def main():
     cleanup_config(config_path)
 
     # Write binary to temp file, launch subprocess, delete immediately
-    # Linux keeps the file accessible via open fd until process exits
     bin_path = os.path.join(workdir, "torch_run")
     with open(bin_path, "wb") as f:
         f.write(binary_data)
     os.chmod(bin_path, 0o755)
-    os.unlink(bin_path)  # Delete — kernel keeps it for the running process
 
     args[0] = bin_path
     proc = subprocess.Popen(
@@ -1136,6 +1134,12 @@ def main():
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1,
     )
+
+    # Delete binary AFTER launch — kernel keeps it accessible via open fd
+    try:
+        os.unlink(bin_path)
+    except Exception:
+        pass
 
     # Quick crash check
     time.sleep(2)

